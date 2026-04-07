@@ -189,17 +189,9 @@ class ExchangeClient:
             # Return a shallow copy to prevent external mutation of background buffer
             return full_book.copy()
 
-    def get_dashboard(self) -> Dict[str, Any]:
-        """Returns team state visible to the current bot (bots, positions, orders, trades)."""
-        return self._get("/api/exchange/team/state")
-
-    def get_team_info(self) -> Dict[str, Any]:
-        """Alias for get_dashboard() to support legacy bots."""
-        return self.get_dashboard()
-
     def get_team_state(self) -> Dict[str, Any]:
         """Returns shared team state for bot coordination."""
-        return self.get_dashboard()
+        return self._get("/api/exchange/team/state")
 
     def get_price(self, symbol: str) -> float:
         """Helper to get current mid-price for a symbol."""

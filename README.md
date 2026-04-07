@@ -31,8 +31,6 @@ The main client methods exposed in `knight_trader_share.py` are:
 * `client.stream_state()`
 * `client.get_book(symbol=None)`
 * `client.get_team_state()`
-* `client.get_dashboard()`
-* `client.get_team_info()`
 * `client.buy(symbol, price, quantity)`
 * `client.sell(symbol, price, quantity)`
 * `client.cancel(order_id)`
@@ -54,4 +52,3 @@ An optional `AGENT_URL` may also be used for timeseries requests in deployments 
 
 * `get_team_state()` is the intended low-frequency coordination path for bots on the same team.
 * There is no separate bot-to-bot messaging API shown in this public reference.
-* `get_dashboard()` and `get_team_info()` are legacy aliases for `get_team_state()`.

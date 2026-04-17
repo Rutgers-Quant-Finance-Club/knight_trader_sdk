@@ -27,6 +27,13 @@ class OrderError(ExchangeException):
 
 
 class ExchangeClient:
+    @staticmethod
+    def _env_flag(name: str, default: bool = False) -> bool:
+        raw = os.environ.get(name)
+        if raw is None:
+            return default
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+
     def __init__(self, api_url: Optional[str] = None, bot_id: Optional[str] = None):
         self.api_url = api_url or os.environ.get("EXCHANGE_URL", "http://127.0.0.1:3000")
         self.bot_id = str(bot_id or os.environ.get("BOT_ID") or "")
@@ -61,6 +68,10 @@ class ExchangeClient:
         self._state_stream_healthy = False
         self._ack_timeout_secs = float(os.environ.get("LOAD_ACK_TIMEOUT_SECS", "3.0"))
         self._max_pending_orders = int(os.environ.get("LOAD_MAX_PENDING_ORDERS", "96"))
+        self._load_backpressure_enabled = self._env_flag(
+            "SDK_ENABLE_LOAD_BACKPRESSURE",
+            default=bool(os.environ.get("LOAD_PROFILE") or os.environ.get("LOAD_MODE")),
+        )
         self._cooldown_until = 0.0
         self._cooldown_secs = float(os.environ.get("LOAD_BACKOFF_SECS", "0.35"))
         self._max_cooldown_secs = float(os.environ.get("LOAD_MAX_BACKOFF_SECS", "2.0"))
@@ -131,6 +142,16 @@ class ExchangeClient:
         self._symbol_cooldowns[symbol] = max(
             self._symbol_cooldowns.get(symbol, 0.0),
             time.time() + seconds,
+        )
+
+    @staticmethod
+    def _is_invalid_market_state(reason: str) -> bool:
+        lowered = reason.lower()
+        return (
+            "not tradable" in lowered
+            or "paused" in lowered
+            or "pre-open" in lowered
+            or "closed" in lowered
         )
 
     def _fail_all_pending(self, reason: str):
@@ -660,7 +681,7 @@ class ExchangeClient:
         if not self._state_stream_healthy:
             self._set_cooldown(1.0)
             return None
-        if self._pending_depth() >= self._max_pending_orders:
+        if self._load_backpressure_enabled and self._pending_depth() >= self._max_pending_orders:
             self._set_cooldown(2.0)
             self._log_limited(
                 "pending_cap",
@@ -715,14 +736,13 @@ class ExchangeClient:
             reason = str(exc)
             self._bump_diagnostic("order_rejects")
             self._bump_reject_reason(reason)
-            lowered = reason.lower()
-            if "not tradable" in lowered:
+            if self._is_invalid_market_state(reason):
                 self._cooldown_symbol(symbol, 10.0)
-            elif "insufficient" in lowered or "balance" in lowered or "capital" in lowered:
-                self._cooldown_symbol(symbol, 2.0)
-            elif "paused" in lowered or "pre-open" in lowered or "closed" in lowered:
-                self._cooldown_symbol(symbol, 5.0)
-            self._set_cooldown(1.0)
+            elif self._load_backpressure_enabled:
+                lowered = reason.lower()
+                if "insufficient" in lowered or "balance" in lowered or "capital" in lowered:
+                    self._cooldown_symbol(symbol, 2.0)
+                self._set_cooldown(1.0)
             self._log_limited("order_rejected", f"Order Rejected: {exc}", min_interval=2.0)
             return None
         except ExchangeException as exc:
@@ -803,11 +823,12 @@ class ExchangeClient:
             reason = str(exc)
             self._bump_diagnostic("order_rejects")
             self._bump_reject_reason(reason)
-            lowered = reason.lower()
-            if "not tradable" in lowered or "auction" in lowered:
+            if self._is_invalid_market_state(reason) or "auction" in reason.lower():
                 self._cooldown_symbol(symbol, 10.0)
-            elif "insufficient" in lowered or "balance" in lowered or "capital" in lowered:
-                self._cooldown_symbol(symbol, 3.0)
+            elif self._load_backpressure_enabled:
+                lowered = reason.lower()
+                if "insufficient" in lowered or "balance" in lowered or "capital" in lowered:
+                    self._cooldown_symbol(symbol, 3.0)
             self._log_limited("auction_rejected", f"Auction Bid Rejected: {exc}", min_interval=2.0)
             return False
         except ExchangeException as exc:

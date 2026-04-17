@@ -16,7 +16,7 @@ In practice, competitors write bot code against `ExchangeClient` and the bundled
 
 ## SDK surface
 
-The main client methods exposed in `knight_trader.py` / `knight_trader_share.py` are:
+The main client methods exposed in `knight_trader.py` are:
 
 - `ExchangeClient()`
 - `client.stream_state()`
@@ -43,6 +43,12 @@ The client expects the competition runtime to provide:
 - `EXCHANGE_URL`
 
 `BOT_ID` is the bot credential used by the SDK for trading and authenticated websocket access.
+
+## Files in this public SDK bundle
+
+- `knight_trader.py`: main client
+- `exchange_wire.py`: websocket/state decoding dependency used by `knight_trader.py`
+- `starter_bot.py`: simple example bot
 
 ## Notes
 
